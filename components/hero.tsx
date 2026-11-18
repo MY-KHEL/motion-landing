@@ -1,6 +1,7 @@
 import { Orbit } from "@/components/orbit";
+import type { Video } from "@/lib/types";
 
-export function Hero() {
+export function Hero({ video = null }: { video?: Video | null }) {
   return (
     <section className="rise-load mx-auto max-w-[1120px] px-5 pt-16 pb-8 sm:pt-24">
       <div className="mx-auto max-w-3xl text-center">
@@ -27,7 +28,22 @@ export function Hero() {
         </div>
       </div>
       <div className="mt-12 sm:mt-16">
-        <Orbit />
+        {video ? (
+          <div className="orbit-stage aspect-[4/3] md:aspect-[16/8.2]">
+            <video
+              src={video.blobUrl}
+              className="h-full w-full object-cover"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              aria-label={video.title}
+            />
+          </div>
+        ) : (
+          <Orbit />
+        )}
       </div>
     </section>
   );

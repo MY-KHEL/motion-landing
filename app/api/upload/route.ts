@@ -2,7 +2,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { isAdmin } from "@/lib/auth";
 
-const MAX_BYTES = 500 * 1024 * 1024;
+const MAX_BYTES = 5000 * 1024 * 1024;
 
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -20,7 +20,12 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
 
         return {
-          allowedContentTypes: ["video/mp4", "video/webm", "video/quicktime"],
+          allowedContentTypes: [
+            "video/mp4",
+            "video/webm",
+            "video/quicktime",
+            "application/octet-stream",
+          ],
           maximumSizeInBytes: MAX_BYTES,
           addRandomSuffix: true,
         };

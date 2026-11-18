@@ -13,7 +13,8 @@ import { isCategory } from "@/lib/categories";
 import {
   deleteVideoRow,
   insertVideo,
-  moveVideoRow,
+  orderVideoRows,
+  setHeroVideo,
   updateVideoRow,
 } from "@/lib/db";
 import type { ActionResult } from "@/lib/types";
@@ -161,19 +162,41 @@ export async function removeVideo(id: string): Promise<ActionResult> {
   return ok;
 }
 
-export async function reorderVideo(
-  id: string,
-  direction: "up" | "down",
-): Promise<ActionResult> {
+export async function orderVideos(ids: string[]): Promise<ActionResult> {
+  const denied = await gate();
+  if (denied) return denied;
+  if (!ids.every((id) => /^[0-9a-f-]{36}$/i.test(id))) {
+    return { error: "That order could not be saved." };
+  }
+
+  try {
+    await orderVideoRows(ids);
+  } catch (error) {
+    console.error("Could not reorder videos", error);
+    return { error: "The reel order could not be changed." };
+  }
+
+  refresh();
+  return ok;
+}
+
+export async function makeHero(id: string): Promise<ActionResult> {
   const denied = await gate();
   if (denied) return denied;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "That film could not be found." };
 
   try {
-    await moveVideoRow(id, direction);
+    await setHeroVideo(id);
   } catch (error) {
-    console.error("Could not reorder video", error);
-    return { error: "The reel order could not be changed." };
+    console.error("Could not set hero video", error);
+    const message = error instanceof Error ? error.message : "";
+    if (/is_hero/i.test(message)) {
+      return {
+        error:
+          "Add is_hero in Neon first. The alter line is at the top of db/schema.sql.",
+      };
+    }
+    return { error: "That film could not become the hero." };
   }
 
   refresh();

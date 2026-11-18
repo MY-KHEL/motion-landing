@@ -7,6 +7,7 @@ export type Video = {
   blobUrl: string;
   blobPathname: string;
   sortOrder: number;
+  isHero: boolean;
 };
 
 export type ActionResult = {

@@ -1,12 +1,13 @@
 "use client";
 
-import { startTransition, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import {
   createVideo,
   logout,
+  makeHero,
+  orderVideos,
   removeVideo,
-  reorderVideo,
   saveVideo,
 } from "@/app/admin/actions";
 import { CATEGORIES } from "@/lib/categories";
@@ -31,6 +32,11 @@ export function Dashboard({
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const uploadPercent = useRef(0);
+
+  useEffect(() => {
+    void clearControllingServiceWorker();
+  }, []);
 
   async function onUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,7 +66,8 @@ export function Dashboard({
 
     setBusy(true);
     setError(null);
-    setStatus("Uploading…");
+    uploadPercent.current = 0;
+    setStatus("Uploading 0%");
 
     try {
       const blob = await upload(uploadPath(file), file, {
@@ -69,7 +76,9 @@ export function Dashboard({
         contentType,
         multipart: file.size > 4 * 1024 * 1024,
         onUploadProgress: ({ percentage }) => {
-          setStatus(`Uploading ${Math.round(percentage)}%`);
+          const next = Math.max(uploadPercent.current, Math.round(percentage));
+          uploadPercent.current = next;
+          setStatus(`Uploading ${next}%`);
         },
       });
 
@@ -195,77 +204,229 @@ export function Dashboard({
         </button>
       </form>
 
-      <ul className="mt-10 space-y-4">
-        {videos.length === 0 ? (
-          <li className="text-sm text-muted">No films published yet.</li>
-        ) : (
-          videos.map((video, index) => (
-            <li
-              key={video.id}
-              className="grid gap-4 rounded-[28px] border border-white/8 bg-card p-4 sm:grid-cols-[180px_1fr] sm:p-5"
-            >
-              <video
-                src={video.blobUrl}
-                muted
-                playsInline
-                preload="metadata"
-                className="aspect-video w-full rounded-2xl bg-black object-cover"
-              />
-              <form
-                className="grid gap-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const data = new FormData(event.currentTarget);
-                  run(() => saveVideo(data));
-                }}
-              >
-                <input type="hidden" name="id" value={video.id} />
-                <input name="title" defaultValue={video.title} required maxLength={120} className={FIELD} />
-                <select name="category" defaultValue={video.category} className={FIELD}>
-                  {CATEGORIES.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    className="press inline-flex h-11 items-center rounded-full bg-white px-4 text-sm font-semibold text-black"
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    disabled={index === 0}
-                    onClick={() => run(() => reorderVideo(video.id, "up"))}
-                    className="press inline-flex h-11 items-center rounded-full border border-white/15 px-4 text-sm disabled:opacity-40"
-                  >
-                    Move up
-                  </button>
-                  <button
-                    type="button"
-                    disabled={index === videos.length - 1}
-                    onClick={() => run(() => reorderVideo(video.id, "down"))}
-                    className="press inline-flex h-11 items-center rounded-full border border-white/15 px-4 text-sm disabled:opacity-40"
-                  >
-                    Move down
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => run(() => removeVideo(video.id))}
-                    className="press inline-flex h-11 items-center rounded-full px-4 text-sm text-coral"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </form>
-            </li>
-          ))
-        )}
-      </ul>
+      <FilmList
+        videos={videos}
+        onSave={(data) => run(() => saveVideo(data))}
+        onOrder={(ids) => run(() => orderVideos(ids))}
+        onHero={(id) => run(() => makeHero(id))}
+        onRemove={(id) => run(() => removeVideo(id))}
+      />
     </div>
   );
+}
+
+function FilmList({
+  videos,
+  onSave,
+  onOrder,
+  onHero,
+  onRemove,
+}: {
+  videos: Video[];
+  onSave: (data: FormData) => void;
+  onOrder: (ids: string[]) => void;
+  onHero: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const dragId = useRef<string | null>(null);
+  const rowsRef = useRef(videos);
+  const [rows, setRows] = useState(videos);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    rowsRef.current = videos;
+    setRows(videos);
+  }, [videos]);
+
+  function moveTo(clientY: number) {
+    const id = dragId.current;
+    const list = listRef.current;
+    if (!id || !list) return;
+    const items = [...list.querySelectorAll<HTMLElement>("[data-film-id]")];
+    let index = items.length - 1;
+    for (let i = 0; i < items.length; i += 1) {
+      const box = items[i]?.getBoundingClientRect();
+      if (!box) continue;
+      if (clientY < box.top + box.height / 2) {
+        index = i;
+        break;
+      }
+    }
+    setRows((current) => {
+      const from = current.findIndex((video) => video.id === id);
+      if (from < 0 || from === index) return current;
+      const next = current.slice();
+      const [moved] = next.splice(from, 1);
+      if (!moved) return current;
+      next.splice(index, 0, moved);
+      rowsRef.current = next;
+      return next;
+    });
+  }
+
+  function finishDrag() {
+    const id = dragId.current;
+    dragId.current = null;
+    setDraggingId(null);
+    if (!id) return;
+    const next = rowsRef.current;
+    const nextIds = next.map((video) => video.id).join(",");
+    const savedIds = videos.map((video) => video.id).join(",");
+    if (nextIds !== savedIds) onOrder(next.map((video) => video.id));
+  }
+
+  return (
+    <ul ref={listRef} className="mt-8 space-y-2 overflow-x-auto">
+      {rows.length === 0 ? (
+        <li className="text-sm text-muted">No films published yet.</li>
+      ) : (
+        rows.map((video) => (
+          <FilmRow
+            key={video.id}
+            video={video}
+            dragging={draggingId === video.id}
+            onSave={onSave}
+            onHero={() => onHero(video.id)}
+            onRemove={() => onRemove(video.id)}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              dragId.current = video.id;
+              setDraggingId(video.id);
+            }}
+            onPointerMove={(event) => {
+              if (dragId.current !== video.id) return;
+              moveTo(event.clientY);
+            }}
+            onPointerUp={finishDrag}
+          />
+        ))
+      )}
+    </ul>
+  );
+}
+
+function FilmRow({
+  video,
+  dragging,
+  onSave,
+  onHero,
+  onRemove,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+}: {
+  video: Video;
+  dragging: boolean;
+  onSave: (data: FormData) => void;
+  onHero: () => void;
+  onRemove: () => void;
+  onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onPointerMove: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onPointerUp: () => void;
+}) {
+  const [title, setTitle] = useState(video.title);
+  const [category, setCategory] = useState(video.category);
+  const changed = title.trim() !== video.title || category !== video.category;
+
+  useEffect(() => {
+    setTitle(video.title);
+    setCategory(video.category);
+  }, [video.title, video.category]);
+
+  return (
+    <li
+      data-film-id={video.id}
+      className={`flex min-w-[760px] items-center gap-3 rounded-2xl border border-white/8 bg-card px-3 py-2 ${dragging ? "opacity-60" : ""}`}
+    >
+      <button
+        type="button"
+        aria-label={`Drag ${video.title}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        className="inline-flex h-11 w-8 shrink-0 cursor-grab touch-none items-center justify-center text-muted active:cursor-grabbing"
+      >
+        <span aria-hidden className="text-lg leading-none">
+          ⋮⋮
+        </span>
+      </button>
+      <video
+        src={video.blobUrl}
+        muted
+        playsInline
+        preload="metadata"
+        className="h-12 w-20 shrink-0 rounded-lg bg-black object-cover"
+      />
+      <form
+        className="flex min-w-0 flex-1 items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!changed) return;
+          const data = new FormData();
+          data.set("id", video.id);
+          data.set("title", title);
+          data.set("category", category);
+          onSave(data);
+        }}
+      >
+        <input
+          name="title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          required
+          maxLength={120}
+          aria-label="Title"
+          className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-sm outline-none focus:border-blue"
+        />
+        <select
+          name="category"
+          value={category}
+          onChange={(event) => setCategory(event.target.value as Video["category"])}
+          aria-label="Category"
+          className="h-11 w-32 shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 text-sm outline-none focus:border-blue sm:w-40"
+        >
+          {CATEGORIES.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          disabled={!changed}
+          className="press inline-flex h-11 shrink-0 items-center rounded-full bg-white px-4 text-sm font-semibold text-black disabled:opacity-40"
+        >
+          Save
+        </button>
+      </form>
+      <button
+        type="button"
+        aria-pressed={video.isHero}
+        onClick={onHero}
+        className={`press inline-flex h-11 shrink-0 items-center rounded-full px-3 text-sm ${video.isHero ? "bg-blue text-white" : "border border-white/15"}`}
+      >
+        {video.isHero ? "Hero" : "Make hero"}
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="press inline-flex h-11 shrink-0 items-center rounded-full px-3 text-sm text-coral"
+      >
+        Remove
+      </button>
+    </li>
+  );
+}
+
+async function clearControllingServiceWorker() {
+  if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) return;
+  if (sessionStorage.getItem("md-sw-cleared") === "1") return;
+  sessionStorage.setItem("md-sw-cleared", "1");
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+  window.location.reload();
 }
 
 function runAction(task: () => Promise<{ error: string }>) {

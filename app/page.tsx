@@ -14,10 +14,16 @@ export default function Home() {
     <div id="top">
       <Header />
       <main>
-        <Hero />
-        <Statement />
-        <Suspense fallback={<SelectedWork videos={[]} />}>
-          <WorkReel />
+        <Suspense
+          fallback={
+            <>
+              <Hero />
+              <Statement />
+              <SelectedWork videos={[]} />
+            </>
+          }
+        >
+          <LandingReel />
         </Suspense>
         <Services />
         <Process />
@@ -28,7 +34,14 @@ export default function Home() {
   );
 }
 
-async function WorkReel() {
+async function LandingReel() {
   const { videos } = await listVideos();
-  return <SelectedWork videos={videos} />;
+  const hero = videos.find((video) => video.isHero) ?? null;
+  return (
+    <>
+      <Hero video={hero} />
+      <Statement />
+      <SelectedWork videos={videos} />
+    </>
+  );
 }

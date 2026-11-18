@@ -20,11 +20,7 @@ export async function listVideos(): Promise<VideoCatalog> {
 
   try {
     const sql = neon(url);
-    const rows = await sql`
-      select id, title, category, blob_url, blob_pathname, sort_order
-      from videos
-      order by sort_order asc, created_at asc
-    `;
+    const rows = await selectVideoRows(sql);
 
     const videos: Video[] = [];
     for (const row of rows) {
@@ -37,6 +33,7 @@ export async function listVideos(): Promise<VideoCatalog> {
         blobUrl: String(row.blob_url),
         blobPathname: String(row.blob_pathname),
         sortOrder: Number(row.sort_order),
+        isHero: Boolean(row.is_hero),
       });
     }
 
@@ -96,30 +93,59 @@ export async function deleteVideoRow(id: string) {
   return rows[0] ? String(rows[0].blob_pathname) : null;
 }
 
-export async function moveVideoRow(id: string, direction: "up" | "down") {
+export async function orderVideoRows(ids: string[]) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
   const sql = neon(url);
-  const rows = await sql`
-    select id
-    from videos
-    order by sort_order asc, created_at asc
-  `;
-  const ids = rows.map((row) => String(row.id));
-  const index = ids.indexOf(id);
-  const swap = direction === "up" ? index - 1 : index + 1;
-  if (index < 0 || swap < 0 || swap >= ids.length) return;
+  const rows = await sql`select id from videos`;
+  const existing = rows.map((row) => String(row.id));
+  const sameSet =
+    ids.length === existing.length && ids.every((id) => existing.includes(id));
+  if (!sameSet) throw new Error("That order does not match the catalog.");
 
-  const next = ids.slice();
-  const current = next[index];
-  const neighbor = next[swap];
-  if (!current || !neighbor) return;
-  next[index] = neighbor;
-  next[swap] = current;
-
-  for (let order = 0; order < next.length; order += 1) {
-    const videoId = next[order];
+  for (let order = 0; order < ids.length; order += 1) {
+    const videoId = ids[order];
     if (!videoId) continue;
     await sql`update videos set sort_order = ${order} where id = ${videoId}`;
+  }
+}
+
+export async function setHeroVideo(id: string) {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set");
+  const sql = neon(url);
+  const current = await sql`select is_hero from videos where id = ${id}`;
+  await sql`update videos set is_hero = false`;
+  if (!current[0]?.is_hero) {
+    await sql`update videos set is_hero = true where id = ${id}`;
+  }
+}
+
+type VideoRow = {
+  id: unknown;
+  title: unknown;
+  category: unknown;
+  blob_url: unknown;
+  blob_pathname: unknown;
+  sort_order: unknown;
+  is_hero: unknown;
+};
+
+async function selectVideoRows(sql: ReturnType<typeof neon<false, false>>): Promise<VideoRow[]> {
+  try {
+    return (await sql`
+      select id, title, category, blob_url, blob_pathname, sort_order, is_hero
+      from videos
+      order by sort_order asc, created_at asc
+    `) as VideoRow[];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/is_hero/i.test(message)) throw error;
+    const rows = await sql`
+      select id, title, category, blob_url, blob_pathname, sort_order
+      from videos
+      order by sort_order asc, created_at asc
+    `;
+    return rows.map((row) => ({ ...row, is_hero: false })) as VideoRow[];
   }
 }

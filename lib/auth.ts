@@ -1,5 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
+
 
 const COOKIE = "md_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
@@ -21,6 +23,7 @@ function sign(payload: string) {
 }
 
 export async function isAdmin() {
+  await connection();
   const secret = process.env.AUTH_SECRET;
   if (!secret) return false;
 
