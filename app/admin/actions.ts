@@ -74,6 +74,21 @@ export async function logout() {
   await clearSession();
 }
 
+export async function discardUpload(pathname: string): Promise<ActionResult> {
+  const denied = await gate();
+  if (denied) return denied;
+  if (!isPathname(pathname)) return { error: "That upload could not be removed." };
+
+  try {
+    await del(pathname);
+  } catch (error) {
+    console.error("Could not discard upload", error);
+    return { error: "The upload could not be removed." };
+  }
+
+  return ok;
+}
+
 export async function createVideo(input: {
   title: string;
   category: string;

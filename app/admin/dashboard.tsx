@@ -4,12 +4,14 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import {
   createVideo,
+  discardUpload,
   logout,
   makeHero,
   orderVideos,
   removeVideo,
   saveVideo,
 } from "@/app/admin/actions";
+import { CheckIcon, TrashIcon } from "@/components/icons";
 import { CATEGORIES } from "@/lib/categories";
 import type { Video } from "@/lib/types";
 
@@ -33,6 +35,8 @@ export function Dashboard({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const uploadPercent = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const stoppedRef = useRef(false);
 
   useEffect(() => {
     void clearControllingServiceWorker();
@@ -64,6 +68,9 @@ export function Dashboard({
       return;
     }
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+    stoppedRef.current = false;
     setBusy(true);
     setError(null);
     uploadPercent.current = 0;
@@ -75,12 +82,20 @@ export function Dashboard({
         handleUploadUrl: "/api/upload",
         contentType,
         multipart: file.size > 4 * 1024 * 1024,
+        abortSignal: controller.signal,
         onUploadProgress: ({ percentage }) => {
           const next = Math.max(uploadPercent.current, Math.round(percentage));
           uploadPercent.current = next;
-          setStatus(`Uploading ${next}%`);
+          setStatus(next >= 99 ? "Finishing the upload…" : `Uploading ${next}%`);
         },
       });
+
+      if (stoppedRef.current || controller.signal.aborted) {
+        await runAction(() => discardUpload(blob.pathname));
+        setError(null);
+        setStatus("Upload stopped.");
+        return;
+      }
 
       setStatus("Saving to the catalog…");
       const result = await runAction(() =>
@@ -101,11 +116,22 @@ export function Dashboard({
         setStatus(null);
       }
     } catch (uploadError) {
-      setStatus(null);
-      setError(uploadError instanceof Error ? uploadError.message : "Upload failed");
+      if (stoppedRef.current || controller.signal.aborted || isAbortError(uploadError)) {
+        setError(null);
+        setStatus("Upload stopped.");
+      } else {
+        setStatus(null);
+        setError(uploadError instanceof Error ? uploadError.message : "Upload failed");
+      }
     } finally {
+      abortRef.current = null;
       setBusy(false);
     }
+  }
+
+  function stopUpload() {
+    stoppedRef.current = true;
+    abortRef.current?.abort();
   }
 
   function run(task: () => Promise<{ error: string }>) {
@@ -195,13 +221,23 @@ export function Dashboard({
             {error}
           </p>
         ) : null}
-        <button
-          type="submit"
-          disabled={busy || !uploadsReady}
-          className="press inline-flex h-12 items-center justify-center rounded-full bg-blue px-6 text-sm font-semibold text-white disabled:opacity-50"
-        >
-          {busy ? "Working…" : "Publish"}
-        </button>
+        {busy ? (
+          <button
+            type="button"
+            onClick={stopUpload}
+            className="press inline-flex h-12 items-center justify-center rounded-full border border-white/15 px-6 text-sm font-semibold text-white"
+          >
+            Stop
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!uploadsReady}
+            className="press inline-flex h-12 items-center justify-center rounded-full bg-blue px-6 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Publish
+          </button>
+        )}
       </form>
 
       <FilmList
@@ -396,9 +432,10 @@ function FilmRow({
         <button
           type="submit"
           disabled={!changed}
-          className="press inline-flex h-11 shrink-0 items-center rounded-full bg-white px-4 text-sm font-semibold text-black disabled:opacity-40"
+          aria-label="Save"
+          className="press inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-black disabled:opacity-40"
         >
-          Save
+          <CheckIcon />
         </button>
       </form>
       <button
@@ -412,9 +449,10 @@ function FilmRow({
       <button
         type="button"
         onClick={onRemove}
-        className="press inline-flex h-11 shrink-0 items-center rounded-full px-3 text-sm text-coral"
+        aria-label="Remove"
+        className="press inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-coral"
       >
-        Remove
+        <TrashIcon />
       </button>
     </li>
   );
@@ -435,6 +473,11 @@ function runAction(task: () => Promise<{ error: string }>) {
       task().then(resolve, reject);
     });
   });
+}
+
+function isAbortError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return error.name === "AbortError" || error.name === "BlobRequestAbortedError";
 }
 
 function uploadPath(file: File) {
