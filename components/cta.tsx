@@ -1,5 +1,6 @@
-const CONTACT_HREF =
-  "mailto:?subject=A%20project%20that%20should%20move&body=Tell%20me%20what%20should%20move.";
+const CONTACT_HREF = `https://wa.me/2349135878494?text=${encodeURIComponent(
+  "Good day , motion designer,\n\nI have a work for you.",
+)}`;
 
 export function Cta() {
   return (
@@ -13,6 +14,8 @@ export function Cta() {
         </p>
         <a
           href={CONTACT_HREF}
+          target="_blank"
+          rel="noopener noreferrer"
           className="press mt-8 inline-flex h-12 items-center justify-center rounded-full bg-white px-6 text-sm font-semibold text-black"
         >
           Start a project

@@ -7,42 +7,81 @@ import type { Video } from "@/lib/types";
 
 type Filter = "all" | CategoryId;
 
-export function SelectedWork({ videos }: { videos: Video[] }) {
+export function SelectedWork({
+  videos,
+  variant = "preview",
+}: {
+  videos: Video[];
+  variant?: "preview" | "catalog";
+}) {
   const [filter, setFilter] = useState<Filter>("all");
+  const catalog = variant === "catalog";
+  const source = catalog ? videos : videos.slice(0, 5);
   const shown =
-    filter === "all" ? videos : videos.filter((video) => video.category === filter);
+    catalog && filter !== "all"
+      ? source.filter((video) => video.category === filter)
+      : source;
 
   return (
     <section id="work" className="mx-auto max-w-[1120px] px-5 py-12">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Selected work</h2>
-        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-            All work
-          </FilterChip>
-          {CATEGORIES.map((category) => (
-            <FilterChip
-              key={category.id}
-              active={filter === category.id}
-              onClick={() => setFilter(category.id)}
-            >
-              {category.label}
+        {catalog ? (
+          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+              All work
             </FilterChip>
-          ))}
-        </div>
+            {CATEGORIES.map((category) => (
+              <FilterChip
+                key={category.id}
+                active={filter === category.id}
+                onClick={() => setFilter(category.id)}
+              >
+                {category.label}
+              </FilterChip>
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      {videos.length === 0 && filter === "all" ? (
-        <PlaceholderGrid />
-      ) : shown.length === 0 ? (
-        <p className="mt-10 text-sm text-muted">Nothing in this category yet.</p>
+      {shown.length === 0 ? (
+        videos.length === 0 && (!catalog || filter === "all") ? (
+          catalog ? (
+            <p className="mt-10 text-sm text-muted">No films published yet.</p>
+          ) : (
+            <PlaceholderGrid />
+          )
+        ) : (
+          <p className="mt-10 text-sm text-muted">Nothing in this category yet.</p>
+        )
       ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          {shown.map((video, index) => (
-            <VideoCard key={video.id} video={video} featured={index === 0} />
-          ))}
+        <div className={catalog ? undefined : "relative"}>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+            {shown.map((video, index) => (
+              <VideoCard
+                key={video.id}
+                video={video}
+                featured={index === 0}
+                autoplay={catalog}
+              />
+            ))}
+          </div>
+          {catalog ? null : (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-background to-transparent" />
+          )}
         </div>
       )}
+
+      {!catalog && videos.length > 0 ? (
+        <div className="mt-8 flex justify-center">
+          <a
+            href="/work"
+            className="press inline-flex h-12 items-center justify-center rounded-full bg-white px-6 text-sm font-semibold text-black"
+          >
+            See more
+          </a>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -72,14 +111,22 @@ function FilterChip({
   );
 }
 
-function VideoCard({ video, featured }: { video: Video; featured: boolean }) {
+function VideoCard({
+  video,
+  featured,
+  autoplay = false,
+}: {
+  video: Video;
+  featured: boolean;
+  autoplay?: boolean;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   const [engaged, setEngaged] = useState(false);
-  const [paused, setPaused] = useState(true);
+  const [paused, setPaused] = useState(!autoplay);
 
   useEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element || autoplay) return;
     const hoverNone = window.matchMedia("(hover: none)").matches;
     if (!hoverNone) return;
 
@@ -97,11 +144,16 @@ function VideoCard({ video, featured }: { video: Video; featured: boolean }) {
     );
     observer.observe(element);
     return () => observer.disconnect();
-  }, [engaged]);
+  }, [engaged, autoplay]);
 
   function toggle() {
     const element = ref.current;
     if (!element) return;
+    if (autoplay) {
+      if (element.paused) void element.play();
+      else element.pause();
+      return;
+    }
     if (!engaged) {
       element.muted = false;
       element.controls = true;
@@ -129,26 +181,31 @@ function VideoCard({ video, featured }: { video: Video; featured: boolean }) {
           muted
           loop
           playsInline
-          preload={featured ? "auto" : "metadata"}
+          autoPlay={autoplay}
+          preload={autoplay || featured ? "auto" : "metadata"}
           className="h-full w-full object-cover"
           onPlay={() => setPaused(false)}
           onPause={() => setPaused(true)}
           onMouseEnter={(event) => {
-            if (!engaged) void event.currentTarget.play();
+            if (autoplay || engaged) return;
+            void event.currentTarget.play();
           }}
           onMouseLeave={(event) => {
-            if (!engaged) event.currentTarget.pause();
+            if (autoplay || engaged) return;
+            event.currentTarget.pause();
           }}
         />
         <button
           type="button"
           onClick={toggle}
           aria-label={
-            engaged && !paused ? `Pause ${video.title}` : `Play ${video.title}`
+            (autoplay ? !paused : engaged && !paused)
+              ? `Pause ${video.title}`
+              : `Play ${video.title}`
           }
           className="press absolute right-4 bottom-4 grid h-11 w-11 place-items-center rounded-full bg-white text-black shadow-lg"
         >
-          {engaged && !paused ? <PauseIcon /> : <PlayIcon />}
+          {(autoplay ? !paused : engaged && !paused) ? <PauseIcon /> : <PlayIcon />}
         </button>
       </div>
       <div className="mt-3 flex items-baseline justify-between gap-4 px-1">

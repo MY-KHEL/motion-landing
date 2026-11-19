@@ -18,6 +18,8 @@ import type { Video } from "@/lib/types";
 const MAX_BYTES = 500 * 1024 * 1024;
 const FIELD =
   "h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm outline-none focus:border-blue";
+const SELECT =
+  "field-select h-12 w-full rounded-2xl border border-white/10 bg-[#12121a] pl-4 text-sm text-foreground outline-none focus:border-blue";
 
 export function Dashboard({
   videos,
@@ -195,7 +197,7 @@ export function Dashboard({
             <select
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              className={FIELD}
+              className={SELECT}
             >
               {CATEGORIES.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -313,7 +315,7 @@ function FilmList({
   }
 
   return (
-    <ul ref={listRef} className="mt-8 space-y-2 overflow-x-auto">
+    <ul ref={listRef} className="mt-8 space-y-2">
       {rows.length === 0 ? (
         <li className="text-sm text-muted">No films published yet.</li>
       ) : (
@@ -373,7 +375,7 @@ function FilmRow({
   return (
     <li
       data-film-id={video.id}
-      className={`flex min-w-[760px] items-center gap-3 rounded-2xl border border-white/8 bg-card px-3 py-2 ${dragging ? "opacity-60" : ""}`}
+      className={`grid items-center gap-3 rounded-2xl border border-white/8 bg-card px-3 py-2 [grid-template-columns:2rem_5rem_minmax(0,14rem)_minmax(0,14rem)_2.75rem_7rem_2.75rem] ${dragging ? "opacity-60" : ""}`}
     >
       <button
         type="button"
@@ -396,7 +398,7 @@ function FilmRow({
         className="h-12 w-20 shrink-0 rounded-lg bg-black object-cover"
       />
       <form
-        className="flex min-w-0 flex-1 items-center gap-2"
+        className="contents"
         onSubmit={(event) => {
           event.preventDefault();
           if (!changed) return;
@@ -414,14 +416,14 @@ function FilmRow({
           required
           maxLength={120}
           aria-label="Title"
-          className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-sm outline-none focus:border-blue"
+          className="h-11 w-full max-w-56 rounded-xl border border-white/10 bg-white/5 px-3 text-sm outline-none focus:border-blue"
         />
         <select
           name="category"
           value={category}
           onChange={(event) => setCategory(event.target.value as Video["category"])}
           aria-label="Category"
-          className="h-11 w-32 shrink-0 rounded-xl border border-white/10 bg-white/5 px-2 text-sm outline-none focus:border-blue sm:w-40"
+          className="field-select h-11 w-full max-w-56 rounded-xl border border-white/10 bg-[#12121a] pl-3 text-sm text-foreground outline-none focus:border-blue"
         >
           {CATEGORIES.map((item) => (
             <option key={item.id} value={item.id}>
@@ -442,7 +444,7 @@ function FilmRow({
         type="button"
         aria-pressed={video.isHero}
         onClick={onHero}
-        className={`press inline-flex h-11 shrink-0 items-center rounded-full px-3 text-sm ${video.isHero ? "bg-blue text-white" : "border border-white/15"}`}
+        className={`press inline-flex h-11 w-28 items-center justify-center rounded-full px-3 text-sm ${video.isHero ? "bg-blue text-white" : "border border-white/15"}`}
       >
         {video.isHero ? "Hero" : "Make hero"}
       </button>

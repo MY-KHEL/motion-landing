@@ -3,11 +3,11 @@
 import { useState } from "react";
 
 const LINKS = [
-  { href: "#work", label: "Work" },
-  { href: "#services", label: "Services" },
-  { href: "#process", label: "Process" },
-  { href: "#about", label: "About" },
-  { href: "#contact", label: "Contact" },
+  { href: "/#work", label: "Work" },
+  { href: "/#services", label: "Services" },
+  { href: "/#process", label: "Process" },
+  { href: "/#about", label: "About" },
+  { href: "/#contact", label: "Contact" },
 ];
 
 export function Header() {
@@ -17,7 +17,7 @@ export function Header() {
     <header className="sticky top-0 z-30 border-b border-white/8 bg-background/75 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-[1120px] items-center justify-between px-5">
         <a
-          href="#top"
+          href="/#top"
           className="text-[11px] font-semibold tracking-[0.22em] text-white"
         >
           MOTION DESIGNER
