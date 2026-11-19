@@ -12,6 +12,14 @@ export function Footer() {
         <a href="/#contact" className="hover:text-white">
           Contact
         </a>
+        <a
+          href="https://x.com/degencrooner"
+          className="hover:text-white"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          X
+        </a>
       </nav>
     </footer>
   );

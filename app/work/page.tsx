@@ -7,6 +7,8 @@ import { listVideos } from "@/lib/db";
 
 export const metadata: Metadata = {
   title: "Work",
+  alternates: { canonical: "/work" },
+  openGraph: { url: "/work" },
 };
 
 export default function WorkPage() {
