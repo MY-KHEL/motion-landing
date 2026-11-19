@@ -36,7 +36,11 @@ export const metadata: Metadata = {
     title: "Ojo Michael · Motion Designer",
     description,
   },
+  verification: {
+    google: "viOa0zXWhNnQ2PMJPwrnWL3JQG4j4ngNLI1dZx7Aqm8"
+  }
 };
+
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
